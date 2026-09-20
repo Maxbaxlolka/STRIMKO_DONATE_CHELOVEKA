@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>STRIMKO DONATE OVERLAY</title>
+  <link rel="stylesheet" href="style.css?v=30">
+</head>
+<body class="overlay-page">
+  <main id="overlayStage">
+    <section id="donateAlert" class="donate-alert" hidden>
+      <div class="alert-glow"></div>
+
+      <!-- Прозрачный видеоэффект денег -->
+      <div id="mediaBox" class="media-box" hidden>
+        <video id="donateGif" muted playsinline preload="auto"></video>
+      </div>
+      <div class="alert-content">
+
+        <div class="donate-title">
+          <span id="donateName">STRIMKO TEST</span>
+          <span class="donate-separator">—</span>
+          <span id="donateAmount">100 ₴</span>
+        </div>
+
+        <div id="donateMessage" class="donate-message">
+          Проверка уведомления.
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <audio id="donateAudio" preload="auto"></audio>
+  <audio id="effectAudio" preload="auto"></audio>
+
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <script src="script.js?v=30"></script>
+</body>
+</html>
