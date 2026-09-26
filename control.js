@@ -67,7 +67,18 @@ const eventsRef = db.ref("donateManager/events");
 const LOCAL_SETTINGS_KEY = "strimkoDonateManagerTestSettingsV1";
 const TEST_DONATE_COOLDOWN_MS = 100000;
 const testRateLimitRef = db.ref("donateManager/testRateLimit/lastSentAt");
+const serverTimeOffsetRef = db.ref(".info/serverTimeOffset");
+let serverTimeOffset = 0;
 let testCooldownTimer = null;
+
+serverTimeOffsetRef.on("value", snapshot => {
+  serverTimeOffset = Number(snapshot.val() || 0);
+  syncTestCooldownFromFirebase();
+});
+
+function getServerNow() {
+  return Date.now() + serverTimeOffset;
+}
 
 const DEFAULTS = {
   enabled: false,
@@ -264,7 +275,7 @@ function setTestButtonsDisabled(disabled) {
 function startTestCooldown(lastSentAt) {
   clearInterval(testCooldownTimer);
   const tick = () => {
-    const leftMs = TEST_DONATE_COOLDOWN_MS - (Date.now() - Number(lastSentAt || 0));
+    const leftMs = TEST_DONATE_COOLDOWN_MS - (getServerNow() - Number(lastSentAt || 0));
     if (leftMs <= 0) {
       clearInterval(testCooldownTimer);
       testCooldownTimer = null;
@@ -280,7 +291,7 @@ function startTestCooldown(lastSentAt) {
 }
 
 async function reserveTestDonateSlot() {
-  const now = Date.now();
+  const now = getServerNow();
   const result = await testRateLimitRef.transaction(currentValue => {
     const previous = Number(currentValue || 0);
     if (previous && now - previous < TEST_DONATE_COOLDOWN_MS) return;
@@ -296,6 +307,32 @@ async function reserveTestDonateSlot() {
   startTestCooldown(now);
   return { ok: true, lastSentAt: now };
 }
+
+function syncTestCooldownFromFirebase() {
+  testRateLimitRef.once("value").then(snapshot => {
+    const lastSentAt = Number(snapshot.val() || 0);
+    if (lastSentAt && getServerNow() - lastSentAt < TEST_DONATE_COOLDOWN_MS) {
+      startTestCooldown(lastSentAt);
+    } else {
+      clearInterval(testCooldownTimer);
+      testCooldownTimer = null;
+      setTestButtonsDisabled(false);
+    }
+  }).catch(error => {
+    console.error("Не удалось получить общий лимит тестовых донатов:", error);
+  });
+}
+
+testRateLimitRef.on("value", snapshot => {
+  const lastSentAt = Number(snapshot.val() || 0);
+  if (lastSentAt && getServerNow() - lastSentAt < TEST_DONATE_COOLDOWN_MS) {
+    startTestCooldown(lastSentAt);
+  } else if (!testCooldownTimer) {
+    setTestButtonsDisabled(false);
+  }
+});
+
+syncTestCooldownFromFirebase();
 
 function showMessage(text, isError = false) {
   const box = $("messageBox");
@@ -410,12 +447,9 @@ async function emitDonate(data) {
     showMessage("Тестовый донат отправлен. Следующий можно отправить через 100 секунд.");
   } catch (error) {
     console.error("Ошибка отправки алерта:", error);
-    // Если событие не записалось, освобождаем слот, чтобы ошибка не блокировала панель на 100 секунд.
-    try { await testRateLimitRef.set(0); } catch (_) {}
-    clearInterval(testCooldownTimer);
-    testCooldownTimer = null;
-    setTestButtonsDisabled(false);
-    showMessage("Firebase запретила отправку тестового доната. Проверь правила donateManager/events.", true);
+    // Слот не освобождаем: общий лимит должен оставаться атомарным для всех пользователей.
+    // Если запись события отклонена Firebase, повторная попытка всё равно будет возможна после 100 секунд.
+    showMessage("Firebase запретила отправку тестового доната. Проверь правила donateManager/events и testRateLimit.", true);
   }
 }
 
@@ -478,4 +512,3 @@ settingsRef.on("value", snapshot => {
   showMessage("Не удалось прочитать настройки Firebase.", true);
 });
 })();
-
